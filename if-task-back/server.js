@@ -26,24 +26,34 @@ const atividadesBanco = [
 
 // 1. POST /api/login - Autenticação
 app.post('/api/login', (req, res) => {
-    const { matricula, senha } = req.body;
+  const { matricula, senha } = req.body;
 
-    if (!matricula || !senha) {
-        return res.status(400).json({ erro: "Matrícula e senha são obrigatórias." });
-    }
+  if (!matricula || !senha) {
+    return res.status(400).json({ erro: 'Matrícula e senha são obrigatórias.' });
+  }
 
-    const usuarioLogado = USUARIOS_MOCK.find(
-        user => user.matricula === matricula && user.senha === senha
-    );
+  // Procura se o usuário já existe
+  const usuarioExistente = usuarios.find(u => u.matricula === matricula);
 
-    if (usuarioLogado) {
-        return res.status(200).json({
-            mensagem: "Login realizado com sucesso!",
-            usuario: { nome: usuarioLogado.nome, matricula: usuarioLogado.matricula }
-        });
+  if (usuarioExistente) {
+    // Se existe, valida a senha
+    if (usuarioExistente.senha === senha) {
+      return res.json({ usuario: { matricula: usuarioExistente.matricula, nome: usuarioExistente.nome } });
     } else {
-        return res.status(401).json({ erro: "Matrícula ou senha incorretas." });
+      return res.status(401).json({ erro: 'Senha incorreta para esta matrícula.' });
     }
+  } else {
+    // SE NÃO EXISTE: Cria o usuário na hora!
+    // Como não temos campo de nome no login, vamos gerar um nome automático baseado na matrícula
+    const novoUsuario = {
+      matricula,
+      senha,
+      nome: `Bolsista (${matricula})`
+    };
+
+    usuarios.push(novoUsuario);
+    return res.json({ usuario: { matricula: novoUsuario.matricula, nome: novoUsuario.nome } });
+  }
 });
 
 // 2. GET /api/atividades - Listar tarefas
