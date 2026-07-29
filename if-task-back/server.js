@@ -11,7 +11,8 @@ app.use(express.json()); // Permite que o servidor entenda JSON enviado no corpo
 // ==========================================
 // SIMULAÇÃO DO BANCO DE DADOS (Em Memória)
 // ==========================================
-const USUARIOS_MOCK = [
+// Mudamos para 'usuarios' para bater com o que a rota está usando
+let usuarios = [
     { matricula: "123456", senha: "senha123", nome: "Bolsista Teste" }
 ];
 
@@ -24,35 +25,39 @@ const atividadesBanco = [
 // ROTAS DA API
 // ==========================================
 
-// 1. POST /api/login - Autenticação
+// 1. POST /api/login - Autenticação e Cadastro Automático
 app.post('/api/login', (req, res) => {
-  const { matricula, senha } = req.body;
+  try {
+    const { matricula, senha } = req.body;
 
-  if (!matricula || !senha) {
-    return res.status(400).json({ erro: 'Matrícula e senha são obrigatórias.' });
-  }
-
-  // Procura se o usuário já existe
-  const usuarioExistente = usuarios.find(u => u.matricula === matricula);
-
-  if (usuarioExistente) {
-    // Se existe, valida a senha
-    if (usuarioExistente.senha === senha) {
-      return res.json({ usuario: { matricula: usuarioExistente.matricula, nome: usuarioExistente.nome } });
-    } else {
-      return res.status(401).json({ erro: 'Senha incorreta para esta matrícula.' });
+    if (!matricula || !senha) {
+      return res.status(400).json({ erro: 'Matrícula e senha são obrigatórias.' });
     }
-  } else {
-    // SE NÃO EXISTE: Cria o usuário na hora!
-    // Como não temos campo de nome no login, vamos gerar um nome automático baseado na matrícula
-    const novoUsuario = {
-      matricula,
-      senha,
-      nome: `Bolsista (${matricula})`
-    };
 
-    usuarios.push(novoUsuario);
-    return res.json({ usuario: { matricula: novoUsuario.matricula, nome: novoUsuario.nome } });
+    // Procura se o usuário já existe (forçando comparação como string para evitar bugs)
+    const usuarioExistente = usuarios.find(u => String(u.matricula) === String(matricula));
+
+    if (usuarioExistente) {
+      // Se existe, valida a senha
+      if (usuarioExistente.senha === senha) {
+        return res.json({ usuario: { matricula: usuarioExistente.matricula, nome: usuarioExistente.nome } });
+      } else {
+        return res.status(401).json({ erro: 'Senha incorreta para esta matrícula.' });
+      }
+    } else {
+      // SE NÃO EXISTE: Cria o usuário na hora!
+      const novoUsuario = {
+        matricula: String(matricula),
+        senha: String(senha),
+        nome: `Bolsista (${matricula})`
+      };
+
+      usuarios.push(novoUsuario);
+      return res.json({ usuario: { matricula: novoUsuario.matricula, nome: novoUsuario.nome } });
+    }
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ erro: 'Erro interno no servidor.' });
   }
 });
 
