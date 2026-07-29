@@ -16,10 +16,7 @@ let usuarios = [
     { matricula: "123456", senha: "senha123", nome: "Bolsista Teste" }
 ];
 
-const atividadesBanco = [
-    { id: 1, data: "2026-07-29", descricao: "Estudo inicial das ferramentas de IA e v0.dev", horas: 4 },
-    { id: 2, data: "2026-07-29", descricao: "Estruturação do servidor Express para a oficina", horas: 3 }
-];
+const atividadesBanco = [];
 
 // ==========================================
 // ROTAS DA API
@@ -28,28 +25,28 @@ const atividadesBanco = [
 // 1. POST /api/login - Autenticação e Cadastro Automático
 app.post('/api/login', (req, res) => {
   try {
-    const { matricula, senha } = req.body;
+    const { matricula, senha, nome } = req.body; // Agora recebe o nome também
 
     if (!matricula || !senha) {
       return res.status(400).json({ erro: 'Matrícula e senha são obrigatórias.' });
     }
 
-    // Procura se o usuário já existe (forçando comparação como string para evitar bugs)
     const usuarioExistente = usuarios.find(u => String(u.matricula) === String(matricula));
 
     if (usuarioExistente) {
-      // Se existe, valida a senha
       if (usuarioExistente.senha === senha) {
         return res.json({ usuario: { matricula: usuarioExistente.matricula, nome: usuarioExistente.nome } });
       } else {
         return res.status(401).json({ erro: 'Senha incorreta para esta matrícula.' });
       }
     } else {
-      // SE NÃO EXISTE: Cria o usuário na hora!
+      // SE NÃO EXISTE: Usa o nome digitado, ou um padrão caso tenham deixado em branco
+      const nomeFinal = nome && nome.trim() !== "" ? nome : `Bolsista (${matricula})`;
+
       const novoUsuario = {
         matricula: String(matricula),
         senha: String(senha),
-        nome: `Bolsista (${matricula})`
+        nome: nomeFinal
       };
 
       usuarios.push(novoUsuario);

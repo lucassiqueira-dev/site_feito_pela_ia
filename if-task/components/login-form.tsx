@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { GraduationCap, Loader2, Lock, User } from 'lucide-react'
+import { GraduationCap, Loader2, Lock, User, SquareUser } from 'lucide-react'
 import { login } from '@/lib/api'
 import type { Bolsista } from '@/lib/types'
 
@@ -10,8 +10,10 @@ interface LoginFormProps {
 }
 
 export function LoginForm({ onLogin }: LoginFormProps) {
+  const [isCadastro, setIsCadastro] = useState(false) // Controla se exibe login ou cadastro
   const [matricula, setMatricula] = useState('')
   const [senha, setSenha] = useState('')
+  const [nome, setNome] = useState('') // Novo estado para o nome do bolsista
   const [erro, setErro] = useState<string | null>(null)
   const [carregando, setCarregando] = useState(false)
 
@@ -21,13 +23,15 @@ export function LoginForm({ onLogin }: LoginFormProps) {
     setCarregando(true)
 
     try {
-      // A chamada de API está encapsulada em lib/api.ts -> login().
-      // É lá que a requisição fetch('http://localhost:3000/api/auth/login')
-      // será inserida para autenticar via backend/banco de dados.
-      const bolsista = await login({ matricula, senha })
+      // Passamos a matrícula, senha e o nome (caso o modo seja cadastro)
+      const bolsista = await login({ 
+        matricula, 
+        senha, 
+        ...(isCadastro && { nome: nome.trim() }) 
+      })
       onLogin(bolsista)
     } catch (err) {
-      setErro(err instanceof Error ? err.message : 'Erro ao entrar.')
+      setErro(err instanceof Error ? err.message : 'Erro ao processar requisição.')
     } finally {
       setCarregando(false)
     }
@@ -50,13 +54,44 @@ export function LoginForm({ onLogin }: LoginFormProps) {
 
         <div className="rounded-2xl border border-border bg-card p-6 shadow-xl shadow-black/5 sm:p-8">
           <h2 className="text-lg font-semibold text-card-foreground">
-            Acessar sua conta
+            {isCadastro ? 'Criar sua conta' : 'Acessar sua conta'}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Entre com sua matrícula e senha institucional.
+            {isCadastro 
+              ? 'Preencha os campos para se registrar no sistema.' 
+              : 'Entre com sua matrícula e senha institucional.'}
           </p>
 
           <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
+            
+            {/* CAMPO DINÂMICO DE NOME COMPLETO (SÓ APARECE NO MODO CADASTRO) */}
+            {isCadastro && (
+              <div className="flex flex-col gap-1.5 animate-in fade-in slide-in-from-top-2 duration-200">
+                <label
+                  htmlFor="nome"
+                  className="text-sm font-medium text-foreground"
+                >
+                  Nome Completo
+                </label>
+                <div className="relative">
+                  <SquareUser
+                    className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <input
+                    id="nome"
+                    name="nome"
+                    type="text"
+                    required={isCadastro}
+                    value={nome}
+                    onChange={(e) => setNome(e.target.value)}
+                    placeholder="Seu nome completo"
+                    className="w-full rounded-lg border border-input bg-background py-2.5 pl-10 pr-3 text-sm text-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/30"
+                  />
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-col gap-1.5">
               <label
                 htmlFor="matricula"
@@ -126,12 +161,25 @@ export function LoginForm({ onLogin }: LoginFormProps) {
               {carregando ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                  Entrando...
+                  {isCadastro ? 'Cadastrando...' : 'Entrando...'}
                 </>
               ) : (
-                'Entrar'
+                isCadastro ? 'Cadastrar e Entrar' : 'Entrar'
               )}
             </button>
+            
+            {/* BOTÃO PARA ALTERNAR ENTRE LOGIN E CADASTRO */}
+            <button
+              type="button"
+              onClick={() => {
+                setIsCadastro(!isCadastro)
+                setErro(null)
+              }}
+              className="mt-1 text-sm text-primary hover:underline bg-transparent border-none outline-none cursor-pointer text-center"
+            >
+              {isCadastro ? 'Já tem uma conta? Entre aqui' : 'Ainda não tem uma conta? Cadastre-se'}
+            </button>
+
           </form>
         </div>
 
