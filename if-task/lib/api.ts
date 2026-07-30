@@ -6,9 +6,11 @@ import type { Atividade, Credenciais, NovaAtividade, Bolsista } from './types'
  * ============================================================================
  */
 
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL 
-  ? `${process.env.NEXT_PUBLIC_API_URL}/api` 
-  : 'http://localhost:3001/api'
+// Tratamento seguro para evitar barras duplicadas ou links quebrados
+const rawUrl = process.env.NEXT_PUBLIC_API_URL;
+export const API_BASE_URL = rawUrl
+  ? `${rawUrl.replace(/\/$/, '')}/api`
+  : 'http://localhost:3001/api';
 
 /**
  * Autentica ou Cadastra o bolsista no servidor Express.
