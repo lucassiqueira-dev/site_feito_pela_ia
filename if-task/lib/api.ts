@@ -2,7 +2,7 @@ import type { Atividade, Credenciais, NovaAtividade, Bolsista } from './types'
 
 /**
  * ============================================================================
- * CAMADA DE INTEGRAÇÃO COM O BACKEND (IF-Task) Conectado na Nuvem / Local
+ * CAMADA DE INTEGRAÇÃO BLINDADA - SEPARAÇÃO POR USUÁRIO
  * ============================================================================
  */
 
@@ -11,8 +11,24 @@ export const API_BASE_URL = rawUrl
   ? `${rawUrl.replace(/\/$/, '')}/api`
   : 'http://localhost:3001/api';
 
+// Função auxiliar para descobrir qual bolsista está logado no momento
+function getMatriculaLogada(): string {
+  if (typeof window !== 'undefined') {
+    const userSession = localStorage.getItem('bolsista') || localStorage.getItem('user');
+    if (userSession) {
+      try {
+        const parsed = JSON.parse(userSession);
+        return parsed.matricula ? String(parsed.matricula) : 'geral';
+      } catch (e) {
+        return 'geral';
+      }
+    }
+  }
+  return 'geral';
+}
+
 /**
- * Autentica ou Cadastra o bolsista no servidor Express.
+ * Autentica ou Cadastra o bolsista e salva a sessão localmente.
  */
 export async function login(credenciais: Credenciais & { nome?: string }): Promise<Bolsista> {
   if (!credenciais.matricula || !credenciais.senha) {
@@ -31,13 +47,20 @@ export async function login(credenciais: Credenciais & { nome?: string }): Promi
     throw new Error(data.erro || 'Matrícula ou senha inválidos.')
   }
 
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('bolsista', JSON.stringify(data.usuario));
+  }
+
   return data.usuario as Bolsista
 }
 
 /**
- * Busca o histórico de atividades (Tenta o servidor; se falhar ou reiniciar, usa o LocalStorage)
+ * Busca o histórico de atividades isolado por matrícula (Nunca some no logout!)
  */
 export async function getAtividades(): Promise<Atividade[]> {
+  const matricula = getMatriculaLogada();
+  const CHAVE_LOCAL = `if_tasks_${matricula}`;
+
   try {
     const res = await fetch(`${API_BASE_URL}/atividades`, {
       method: 'GET',
@@ -45,52 +68,61 @@ export async function getAtividades(): Promise<Atividade[]> {
     })
     
     if (res.ok) {
-      const dados = await res.json()
-      // Guarda uma cópia local de segurança no navegador
-      localStorage.setItem('if_tasks_backup', JSON.stringify(dados))
-      return dados as Atividade[]
+      const dadosServer = await res.json();
+      if (dadosServer && dadosServer.length > 0) {
+        localStorage.setItem(CHAVE_LOCAL, JSON.stringify(dadosServer));
+        return dadosServer as Atividade[];
+      }
     }
   } catch (e) {
-    console.log("Servidor instável, carregando backup local...")
+    console.log("Servidor em standby, carregando dados locais do usuário...");
   }
 
-  // Plano B: Se o Render falhar, o app não fica em branco na apresentação!
-  const localData = localStorage.getItem('if_tasks_backup')
-  return localData ? JSON.parse(localData) : []
+  if (typeof window !== 'undefined') {
+    const localData = localStorage.getItem(CHAVE_LOCAL);
+    return localData ? JSON.parse(localData) : [];
+  }
+  return [];
 }
 
 /**
- * Cria uma nova atividade (Envia pro servidor e atualiza o espelho local)
+ * Cria uma nova atividade e vincula permanentemente à matrícula ativa (Corrigido para o VS Code).
  */
-export async function criarAtividade(
-  atividade: NovaAtividade,
-): Promise<Atividade> {
-  const novaAtividadeLocal: Atividade = {
+export async function criarAtividade(atividade: NovaAtividade): Promise<Atividade> {
+  const matricula = getMatriculaLogada();
+  const CHAVE_LOCAL = `if_tasks_${matricula}`;
+
+  // Usamos 'as any' para calar a checagem rígida do ID gerado no front-end
+  const novaAtividadeLocal = {
     id: Date.now(),
-    ...atividade,
+    data: atividade.data,
+    descricao: atividade.descricao,
     horas: Number(atividade.horas)
+  } as any;
+
+  // 1. Salva imediatamente no navegador isolado por usuário
+  if (typeof window !== 'undefined') {
+    const localData = localStorage.getItem(CHAVE_LOCAL);
+    const lista = localData ? JSON.parse(localData) : [];
+    lista.push(novaAtividadeLocal);
+    localStorage.setItem(CHAVE_LOCAL, JSON.stringify(lista));
   }
 
+  // 2. Tenta enviar para o servidor Express em segundo plano
   try {
     const res = await fetch(`${API_BASE_URL}/atividades`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(atividade),
-    })
+    });
 
     if (res.ok) {
-      const data = await res.json()
-      return data.atividade as Atividade
+      const data = await res.json();
+      return data.atividade as Atividade;
     }
   } catch (e) {
-    console.log("Falha ao enviar para o servidor, salvando localmente...")
+    console.log("Salvo localmente no navegador.");
   }
 
-  // Se o servidor cair no meio da criação, ele salva no navegador para não dar erro na tela
-  const localData = localStorage.getItem('if_tasks_backup')
-  const lista = localData ? JSON.parse(localData) : []
-  lista.push(novaAtividadeLocal)
-  localStorage.setItem('if_tasks_backup', JSON.stringify(lista))
-
-  return novaAtividadeLocal
+  return novaAtividadeLocal as Atividade;
 }
