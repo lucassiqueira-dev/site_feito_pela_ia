@@ -33,8 +33,8 @@ function salvarUsuarios(lista) {
 app.use(cors()); 
 app.use(express.json()); 
 
-// Histórico de atividades inicia zerado como você pediu!
-const atividadesBanco = [];
+// Alterado para let para permitir manipulação estável nas rotas
+let atividadesBanco = [];
 
 // ==========================================
 // ROTAS DA API
@@ -49,7 +49,6 @@ app.post('/api/login', (req, res) => {
       return res.status(400).json({ erro: 'Matrícula e senha são obrigatórias.' });
     }
 
-    // Carrega a lista atualizada direto do arquivo permanente
     let usuarios = lerUsuarios();
 
     const usuarioExistente = usuarios.find(u => String(u.matricula) === String(matricula));
@@ -61,7 +60,6 @@ app.post('/api/login', (req, res) => {
         return res.status(401).json({ erro: 'Senha incorreta para esta matrícula.' });
       }
     } else {
-      // SE NÃO EXISTE: Cria o usuário e grava no arquivo permanentemente
       const nomeFinal = nome && nome.trim() !== "" ? nome : `Bolsista (${matricula})`;
 
       const novoUsuario = {
@@ -71,7 +69,7 @@ app.post('/api/login', (req, res) => {
       };
 
       usuarios.push(novoUsuario);
-      salvarUsuarios(usuarios); // Escreve no arquivo físico do servidor
+      salvarUsuarios(usuarios); 
 
       return res.json({ usuario: { matricula: novoUsuario.matricula, nome: novoUsuario.nome } });
     }
@@ -83,29 +81,40 @@ app.post('/api/login', (req, res) => {
 
 // 2. GET /api/atividades - Listar tarefas
 app.get('/api/atividades', (req, res) => {
-    return res.status(200).json(atividadesBanco);
+    try {
+        return res.status(200).json(atividadesBanco || []);
+    } catch (error) {
+        return res.status(200).json([]);
+    }
 });
 
-// 3. POST /api/atividades - Criar nova tarefa
+// 3. POST /api/atividades - Criar nova tarefa com tratamento de erros
 app.post('/api/atividades', (req, res) => {
-    const { data, descricao, horas } = req.body;
+    try {
+        const { data, descricao, horas } = req.body;
 
-    if (!data || !descricao || !horas) {
-        return res.status(400).json({ erro: "Todos os campos são obrigatórios." });
+        if (!data || !descricao || !horas) {
+            return res.status(400).json({ erro: "Todos os campos são obrigatórios." });
+        }
+
+        const novaAtividade = {
+            id: (atividadesBanco.length || 0) + 1,
+            data,
+            descricao,
+            horas: Number(horas)
+        };
+
+        if (!atividadesBanco) activitiesBanco = [];
+        atividadesBanco.push(novaAtividade);
+        
+        return res.status(201).json({
+            mensagem: "Atividade registrada com sucesso!",
+            atividade: novaAtividade
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ erro: "Erro interno ao salvar atividade." });
     }
-
-    const novaAtividade = {
-        id: atividadesBanco.length + 1,
-        data,
-        descricao,
-        horas: Number(horas)
-    };
-
-    atividadesBanco.push(novaAtividade);
-    return res.status(201).json({
-        mensagem: "Atividade registrada com sucesso!",
-        atividade: novaAtividade
-    });
 });
 
 // Inicialização

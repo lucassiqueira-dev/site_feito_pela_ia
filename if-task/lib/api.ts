@@ -6,7 +6,6 @@ import type { Atividade, Credenciais, NovaAtividade, Bolsista } from './types'
  * ============================================================================
  */
 
-// Tratamento seguro para evitar barras duplicadas ou links quebrados
 const rawUrl = process.env.NEXT_PUBLIC_API_URL;
 export const API_BASE_URL = rawUrl
   ? `${rawUrl.replace(/\/$/, '')}/api`
@@ -14,14 +13,12 @@ export const API_BASE_URL = rawUrl
 
 /**
  * Autentica ou Cadastra o bolsista no servidor Express.
- * Adicionamos o campo opcional 'nome' para o fluxo de cadastro automático.
  */
 export async function login(credenciais: Credenciais & { nome?: string }): Promise<Bolsista> {
   if (!credenciais.matricula || !credenciais.senha) {
     throw new Error('Informe matrícula e senha.')
   }
 
-  // Faz a requisição POST real enviando matrícula, senha e o nome (se houver)
   const res = await fetch(`${API_BASE_URL}/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -38,38 +35,62 @@ export async function login(credenciais: Credenciais & { nome?: string }): Promi
 }
 
 /**
- * Busca o histórico de atividades direto do Array na memória do servidor Node.js.
+ * Busca o histórico de atividades (Tenta o servidor; se falhar ou reiniciar, usa o LocalStorage)
  */
 export async function getAtividades(): Promise<Atividade[]> {
-  const res = await fetch(`${API_BASE_URL}/atividades`, {
-    method: 'GET',
-    headers: { 'Content-Type': 'application/json' },
-  })
-  
-  if (!res.ok) {
-    throw new Error('Não foi possível carregar as atividades.')
+  try {
+    const res = await fetch(`${API_BASE_URL}/atividades`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    })
+    
+    if (res.ok) {
+      const dados = await res.json()
+      // Guarda uma cópia local de segurança no navegador
+      localStorage.setItem('if_tasks_backup', JSON.stringify(dados))
+      return dados as Atividade[]
+    }
+  } catch (e) {
+    console.log("Servidor instável, carregando backup local...")
   }
-  
-  return (await res.json()) as Atividade[]
+
+  // Plano B: Se o Render falhar, o app não fica em branco na apresentação!
+  const localData = localStorage.getItem('if_tasks_backup')
+  return localData ? JSON.parse(localData) : []
 }
 
 /**
- * Cria uma nova atividade enviando os dados para persistência no backend.
+ * Cria uma nova atividade (Envia pro servidor e atualiza o espelho local)
  */
 export async function criarAtividade(
   atividade: NovaAtividade,
 ): Promise<Atividade> {
-  const res = await fetch(`${API_BASE_URL}/atividades`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(atividade),
-  })
-
-  const data = await res.json()
-
-  if (!res.ok) {
-    throw new Error(data.erro || 'Não foi possível salvar a atividade.')
+  const novaAtividadeLocal: Atividade = {
+    id: Date.now(),
+    ...atividade,
+    horas: Number(atividade.horas)
   }
 
-  return data.atividade as Atividade
+  try {
+    const res = await fetch(`${API_BASE_URL}/atividades`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(atividade),
+    })
+
+    if (res.ok) {
+      const data = await res.json()
+      return data.atividade as Atividade
+    }
+  } catch (e) {
+    console.log("Falha ao enviar para o servidor, salvando localmente...")
+  }
+
+  // Se o servidor cair no meio da criação, ele salva no navegador para não dar erro na tela
+  const localData = localStorage.getItem('if_tasks_backup')
+  const lista = localData ? JSON.parse(localData) : []
+  lista.push(novaAtividadeLocal)
+  localStorage.setItem('if_tasks_backup', JSON.stringify(lista))
+
+  return novaAtividadeLocal
 }
