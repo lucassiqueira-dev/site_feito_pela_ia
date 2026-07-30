@@ -1,35 +1,56 @@
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
-const PORT = 3001; // Porta diferente do Next.js (que usa a 3000)
+const PORT = 3001; 
+
+// Caminho do arquivo que vai funcionar como nosso Banco de Dados Real
+const FILE_PATH = path.join(__dirname, 'usuarios.json');
+
+// Função para ler os usuários salvos no arquivo
+function lerUsuarios() {
+  try {
+    if (!fs.existsSync(FILE_PATH)) {
+      const padrao = [{ matricula: "123456", senha: "senha123", nome: "Bolsista Teste" }];
+      fs.writeFileSync(FILE_PATH, JSON.stringify(padrao, null, 2));
+      return padrao;
+    }
+    const data = fs.readFileSync(FILE_PATH, 'utf-8');
+    return JSON.parse(data);
+  } catch (error) {
+    return [{ matricula: "123456", senha: "senha123", nome: "Bolsista Teste" }];
+  }
+}
+
+// Função para salvar novos usuários no arquivo
+function salvarUsuarios(lista) {
+  fs.writeFileSync(FILE_PATH, JSON.stringify(lista, null, 2));
+}
 
 // Middlewares obrigatórios
-app.use(cors()); // Permite a comunicação entre portas diferentes (3000 -> 3001)
-app.use(express.json()); // Permite que o servidor entenda JSON enviado no corpo das requisições
+app.use(cors()); 
+app.use(express.json()); 
 
-// ==========================================
-// SIMULAÇÃO DO BANCO DE DADOS (Em Memória)
-// ==========================================
-// Mudamos para 'usuarios' para bater com o que a rota está usando
-let usuarios = [
-    { matricula: "123456", senha: "senha123", nome: "Bolsista Teste" }
-];
-
+// Histórico de atividades inicia zerado como você pediu!
 const atividadesBanco = [];
 
 // ==========================================
 // ROTAS DA API
 // ==========================================
 
-// 1. POST /api/login - Autenticação e Cadastro Automático
+// 1. POST /api/login - Autenticação e Cadastro Automático Protegido
 app.post('/api/login', (req, res) => {
   try {
-    const { matricula, senha, nome } = req.body; // Agora recebe o nome também
+    const { matricula, senha, nome } = req.body; 
 
     if (!matricula || !senha) {
       return res.status(400).json({ erro: 'Matrícula e senha são obrigatórias.' });
     }
+
+    // Carrega a lista atualizada direto do arquivo permanente
+    let usuarios = lerUsuarios();
 
     const usuarioExistente = usuarios.find(u => String(u.matricula) === String(matricula));
 
@@ -40,7 +61,7 @@ app.post('/api/login', (req, res) => {
         return res.status(401).json({ erro: 'Senha incorreta para esta matrícula.' });
       }
     } else {
-      // SE NÃO EXISTE: Usa o nome digitado, ou um padrão caso tenham deixado em branco
+      // SE NÃO EXISTE: Cria o usuário e grava no arquivo permanentemente
       const nomeFinal = nome && nome.trim() !== "" ? nome : `Bolsista (${matricula})`;
 
       const novoUsuario = {
@@ -50,6 +71,8 @@ app.post('/api/login', (req, res) => {
       };
 
       usuarios.push(novoUsuario);
+      salvarUsuarios(usuarios); // Escreve no arquivo físico do servidor
+
       return res.json({ usuario: { matricula: novoUsuario.matricula, nome: novoUsuario.nome } });
     }
   } catch (error) {
